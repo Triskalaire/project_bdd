@@ -1,7 +1,7 @@
 const { Client } = require('pg');
 
 const client = new Client({
-  connectionString: DATABASE_URL,
+  connectionString: 'postgresql://jean:kiki@localhost:5432/db_mutuelle',
 });
 
 client.connect()
