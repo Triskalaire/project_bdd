@@ -1,47 +1,18 @@
 {
-  "name": "api-mutuelle",
+  "name": "bdd",
   "version": "1.0.0",
-  "description": "API pour la gestion des dossiers et justificatifs d'une mutuelle",
-  "main": "dist/index.js",
+  "main": "index.js",
   "scripts": {
-    "start": "node dist/index.js",
-    "dev": "nodemon src/index.ts",
-    "build": "tsc",
-    "test": "mocha tests/*.test.js --timeout 10000",
-    "test:auth": "mocha tests/auth.test.js",
-    "test:assure": "mocha tests/assure.test.js",
-    "test:dossier": "mocha tests/dossier.test.js",
-    "test:justificatif": "mocha tests/justificatif.test.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "description": "",
   "dependencies": {
-    "api-mutuelle": "file:",
-    "axios": "^1.6.7",
-    "bcryptjs": "^3.0.2",
-    "chai": "^4.3.10",
-    "cors": "^2.8.5",
-    "crypto-js": "^4.2.0",
+    "bdd": "file:",
     "dotenv": "^16.5.0",
-    "express": "^4.18.2",
-    "form-data": "^4.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "mocha": "^10.2.0",
-    "multer": "^1.4.5-lts.1",
-    "typeorm": "^0.3.20"
-  },
-  "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cors": "^2.8.17",
-    "@types/crypto-js": "^4.2.2",
-    "@types/express": "^4.17.21",
-    "@types/jsonwebtoken": "^9.0.9",
-    "@types/mocha": "^10.0.6",
-    "@types/multer": "^1.4.12",
-    "@types/node": "^20.17.30",
-    "nodemon": "^3.0.3",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "express": "^5.1.0",
+    "pg": "^8.15.1"
   }
 }
