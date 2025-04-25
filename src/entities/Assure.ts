@@ -2,7 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 import { Mutuelle } from "./Mutuelle";
 import { Dossier } from "./Dossier";
 
-@Entity("assures", { schema: "public" })
+@Entity("assures")
 export class Assure {
     @PrimaryGeneratedColumn("uuid")
     id!: string;

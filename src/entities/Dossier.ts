@@ -4,7 +4,7 @@ import { Assure } from "./Assure";
 import { Message } from "./Message";
 import { Justificatif } from "./Justificatif";
 
-@Entity("dossiers", { schema: "public" })
+@Entity("dossiers")
 export class Dossier {
     @PrimaryGeneratedColumn("uuid")
     id!: string;
