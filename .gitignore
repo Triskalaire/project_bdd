@@ -1,0 +1,82 @@
+# Dépendances
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Fichiers de build
+dist/
+build/
+*.tsbuildinfo
+
+# Fichiers d'environnement
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+
+# Fichiers de logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Fichiers d'IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+
+# Fichiers de couverture de test
+coverage/
+
+# Fichiers temporaires
+tmp/
+temp/
+
+# Fichiers de cache
+.cache/
+.npm/
+.eslintcache
+.stylelintcache
+
+# Fichiers de configuration spécifiques à l'environnement
+config/local.js
+config/development.js
+config/test.js
+config/production.js
+
+# Fichiers de base de données
+*.sqlite
+*.sqlite3
+*.db
+
+# Fichiers de sauvegarde
+*.bak
+*.backup
+*~
+
+# Fichiers de documentation générés
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Fichiers de déploiement
+deploy/
+deployment/
+*.zip
+*.tar.gz
+*.tgz 
