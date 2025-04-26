@@ -1,405 +1,190 @@
-import { Request, Response, Router } from 'express';
+// src/controllers/MutuelleController.ts
+import { Request, Response, Router, RequestHandler } from 'express';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { AppDataSource } from '../config/database';
 import { Mutuelle } from '../entities/Mutuelle';
-import { EncryptionService } from '../services/EncryptionService';
+import { getTenantDataSource } from '../services/TenantDataSource';
+import { authMiddleware } from '../middleware/auth';
 
 export class MutuelleController {
-    static router = Router();
-
-    // Middleware d'authentification
-    static authenticateToken(req: Request, res: Response, next: Function) {
-        const authHeader = req.headers['authorization'];
-        
-        if (!authHeader) {
-            console.log('Pas d\'en-tête Authorization');
-            return res.status(401).json({ 
-                message: 'En-tête d\'autorisation manquant',
-                details: 'Veuillez inclure un en-tête Authorization avec le format: Bearer <token>'
-            });
-        }
-
-        const token = authHeader.split(' ')[1];
-        
-        if (!token) {
-            console.log('Format d\'Authorization invalide:', authHeader);
-            return res.status(401).json({ 
-                message: 'Format d\'autorisation invalide',
-                details: 'Le format doit être: Bearer <token>'
-            });
-        }
-
-        console.log('Token reçu:', token);
-
-        jwt.verify(token, process.env.JWT_SECRET || 'default-secret', async (err: any, decoded: any) => {
-            if (err) {
-                console.log('Erreur de vérification du token:', err.message);
-                return res.status(403).json({ 
-                    message: 'Token invalide ou expiré',
-                    details: err.message
-                });
-            }
-
-            console.log('Token décodé:', decoded);
-
-            try {
-                // Toujours chercher dans le schéma public pour l'authentification
-                await AppDataSource.query(`SET search_path TO public`);
-                
-                const mutuelleRepository = AppDataSource.getRepository(Mutuelle);
-                const mutuelle = await mutuelleRepository.findOne({ 
-                    where: { id: decoded.mutuelleId },
-                    select: ['id', 'nom', 'email', 'telephone', 'adresse', 'ville', 'codePostal', 'pays', 'siret']
-                });
-
-                if (!mutuelle) {
-                    console.log('Mutuelle non trouvée pour l\'ID:', decoded.mutuelleId);
-                    return res.status(404).json({ message: 'Mutuelle non trouvée' });
-                }
-
-                console.log('Mutuelle trouvée:', mutuelle);
-                req.mutuelle = mutuelle;
-                next();
-            } catch (error) {
-                console.error('Erreur lors de la récupération de la mutuelle:', error);
-                res.status(500).json({ message: 'Erreur lors de l\'authentification' });
-            }
-        });
-    }
+    public static router = Router();
 
     static initializeRoutes() {
-        // Routes publiques
+        // Publiques
         this.router.post('/verifier-email', this.verifierEmail);
-        this.router.post('/inscription', this.inscription);
-        this.router.post('/connexion', this.connexion);
-        
-        // Routes protégées
-        this.router.get('/profile', this.authenticateToken, this.getProfile);
-        this.router.put('/profile', this.authenticateToken, this.updateProfile);
+        this.router.post('/inscription',      this.inscription);
+        this.router.post('/connexion',        this.connexion);
+
+        // Protégées
+        this.router.get('/profile', authMiddleware, this.getProfile);
+        this.router.put('/profile', authMiddleware, this.updateProfile);
     }
 
-    static async verifierEmail(req: Request, res: Response) {
-        try {
-            const { email } = req.body;
-
-            if (!email) {
-                return res.status(400).json({ message: 'L\'email est requis' });
-            }
-
-            const mutuelleRepository = AppDataSource.getRepository(Mutuelle);
-            const existingMutuelle = await mutuelleRepository.findOne({ 
-                where: { email },
-                select: ['id', 'email', 'nom'] // Ne pas inclure le mot de passe
-            });
-
-            if (existingMutuelle) {
-                return res.status(200).json({ 
-                    existe: true,
-                    message: 'Un compte existe déjà avec cet email',
-                    mutuelle: {
-                        id: existingMutuelle.id,
-                        email: existingMutuelle.email,
-                        nom: existingMutuelle.nom
-                    }
-                });
-            }
-
-            return res.status(200).json({ 
-                existe: false,
-                message: 'Aucun compte trouvé avec cet email'
-            });
-        } catch (error) {
-            console.error('Erreur lors de la vérification de l\'email:', error);
-            res.status(500).json({ message: 'Une erreur est survenue lors de la vérification' });
+    static verifierEmail: RequestHandler = async (req, res): Promise<void> => {
+        const { email } = req.body;
+        if (!email) {
+            res.status(400).json({ message: 'Email requis' });
+            return;
         }
-    }
+        const exists = await AppDataSource
+            .getRepository(Mutuelle)
+            .exist({ where: { email } });
+        res.json({ exists });
+        return;
+    };
 
-    static async inscription(req: Request, res: Response) {
+    static inscription: RequestHandler = async (req, res): Promise<void> => {
         try {
-            const { nom, email, motDePasse, telephone, adresse, ville, codePostal, pays, siret } = req.body;
+            const {
+                nom, email, motDePasse,
+                telephone, adresse, ville, codePostal, pays, siret
+            } = req.body;
 
-            // Validation des données requises
-            if (!nom || !email || !motDePasse || !telephone || !adresse || !ville || !codePostal || !pays || !siret) {
-                return res.status(400).json({ message: 'Tous les champs sont requis' });
+            if (
+                !nom || !email || !motDePasse ||
+                !telephone || !adresse || !ville ||
+                !codePostal || !pays || !siret
+            ) {
+                res.status(400).json({ message: 'Tous les champs sont requis' });
+                return;
             }
 
-            const mutuelleRepository = AppDataSource.getRepository(Mutuelle);
-            const existingMutuelle = await mutuelleRepository.findOne({ where: { email } });
+            const salt   = await bcrypt.genSalt(10);
+            const hashPw = await bcrypt.hash(motDePasse, salt);
 
-            if (existingMutuelle) {
-                return res.status(400).json({ message: 'Cette adresse email est déjà utilisée' });
-            }
-
-            const hashedPassword = await bcrypt.hash(motDePasse, 10);
-            const mutuelle = mutuelleRepository.create({
-                nom,
-                email,
-                motDePasse: hashedPassword,
-                telephone,
-                adresse,
-                ville,
-                codePostal,
-                pays,
-                siret
+            const repo  = AppDataSource.getRepository(Mutuelle);
+            const saved = await repo.save({
+                nom, email, motDePasse: hashPw,
+                telephone, adresse, ville, codePostal, pays, siret
             });
 
-            await mutuelleRepository.save(mutuelle);
-
-            // Création du schéma pour la mutuelle
-            const schemaName = `mutuelle_${mutuelle.id.replace(/-/g, '_')}`;
-            await AppDataSource.query(`CREATE SCHEMA IF NOT EXISTS ${schemaName}`);
+            await getTenantDataSource(saved.id);
 
             const token = jwt.sign(
-                { 
-                    mutuelleId: mutuelle.id,
-                    tenant: `mutuelle_${mutuelle.id.replace(/-/g, '_')}`
-                },
+                { mutuelleId: saved.id },
                 process.env.JWT_SECRET || 'default-secret',
                 { expiresIn: '24h' }
             );
 
             res.status(201).json({
-                message: 'Inscription réussie',
                 token,
-                mutuelle: {
-                    id: mutuelle.id,
-                    nom: mutuelle.nom,
-                    email: mutuelle.email
-                }
+                mutuelle: { id: saved.id, nom: saved.nom, email: saved.email }
             });
-        } catch (error) {
-            console.error('Erreur lors de l\'inscription:', error);
-            res.status(500).json({ message: 'Une erreur est survenue lors de l\'inscription' });
+            return;
+        } catch (err) {
+            console.error('Erreur inscription :', err);
+            res.status(500).json({ message: 'Erreur serveur' });
+            return;
         }
-    }
+    };
 
-    static async connexion(req: Request, res: Response) {
+    static connexion: RequestHandler = async (req, res): Promise<void> => {
         try {
             const { email, motDePasse } = req.body;
-
-            // Validation des données requises
             if (!email || !motDePasse) {
-                return res.status(400).json({ message: 'Email et mot de passe requis' });
+                res.status(400).json({ message: 'Email et mot de passe requis' });
+                return;
             }
 
-            const mutuelleRepository = AppDataSource.getRepository(Mutuelle);
-            const mutuelle = await mutuelleRepository.findOne({ 
+            const repo = AppDataSource.getRepository(Mutuelle);
+            const m    = await repo.findOne({
                 where: { email },
-                select: ['id', 'email', 'motDePasse'] // Inclure le mot de passe dans la sélection
+                select: ['id', 'motDePasse']
             });
-
-            if (!mutuelle) {
-                return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
-            }
-
-            const isValidPassword = await bcrypt.compare(motDePasse, mutuelle.motDePasse);
-
-            if (!isValidPassword) {
-                return res.status(401).json({ message: 'Email ou mot de passe incorrect' });
+            if (!m || !(await bcrypt.compare(motDePasse, m.motDePasse!))) {
+                res.status(401).json({ message: 'Identifiants invalides' });
+                return;
             }
 
             const token = jwt.sign(
-                { 
-                    mutuelleId: mutuelle.id,
-                    tenant: `mutuelle_${mutuelle.id.replace(/-/g, '_')}`
-                },
+                { mutuelleId: m.id },
                 process.env.JWT_SECRET || 'default-secret',
                 { expiresIn: '24h' }
             );
-
             res.json({ token });
-        } catch (error) {
-            console.error('Erreur lors de la connexion:', error);
-            res.status(500).json({ message: 'Erreur lors de la connexion' });
+            return;
+        } catch (err) {
+            console.error('Erreur connexion :', err);
+            res.status(500).json({ message: 'Erreur serveur' });
+            return;
         }
-    }
+    };
 
-    static async getProfile(req: Request, res: Response) {
+    static getProfile: RequestHandler = async (req, res): Promise<void> => {
         try {
-            const mutuelle = req.mutuelle;
-            res.json(mutuelle);
-        } catch (error) {
-            console.error('Erreur lors de la récupération du profil:', error);
-            res.status(500).json({ message: 'Erreur lors de la récupération du profil' });
-        }
-    }
-
-    static async updateProfile(req: Request, res: Response) {
-        try {
-            const mutuelle = req.mutuelle;
-            const { nom, email, telephone, adresse, ville, codePostal, pays, siret } = req.body;
-
-            const mutuelleRepository = AppDataSource.getRepository(Mutuelle);
-            await mutuelleRepository.update(mutuelle.id, {
-                nom,
-                email,
-                telephone,
-                adresse,
-                ville,
-                codePostal,
-                pays,
-                siret
+            const repo = AppDataSource.getRepository(Mutuelle);
+            const m    = await repo.findOne({ where: { id: req.mutuelle.id } });
+            if (!m) {
+                res.status(404).json({ message: 'Mutuelle introuvable' });
+                return;
+            }
+            res.json({
+                id:    m.id,
+                nom:   m.nom,
+                email: m.email,
+                telephone: m.telephone,
+                adresse:   m.adresse,
+                ville:     m.ville,
+                codePostal:m.codePostal,
+                pays:      m.pays,
+                siret:     m.siret
             });
-
-            res.json({ message: 'Profil mis à jour avec succès' });
-        } catch (error) {
-            console.error('Erreur lors de la mise à jour du profil:', error);
-            res.status(500).json({ message: 'Erreur lors de la mise à jour du profil' });
+            return;
+        } catch (err) {
+            console.error('Erreur getProfile :', err);
+            res.status(500).json({ message: 'Erreur serveur' });
+            return;
         }
-    }
+    };
 
-    static async createMutuelle(req: Request, res: Response) {
+    static updateProfile: RequestHandler = async (req, res): Promise<void> => {
         try {
-            const { nom, email, telephone, adresse, ville, codePostal, pays, siret, motDePasse } = req.body;
+            const {
+                nom, email, motDePasse,
+                telephone, adresse, ville, codePostal, pays, siret
+            } = req.body;
 
-            // Vérifier si la mutuelle existe déjà
-            const existingMutuelle = await AppDataSource.getRepository(Mutuelle).findOne({
-                where: { email }
-            });
-
-            if (existingMutuelle) {
-                return res.status(400).json({ message: "Une mutuelle avec cet email existe déjà" });
+            const repo = AppDataSource.getRepository(Mutuelle);
+            const m    = await repo.findOne({ where: { id: req.mutuelle.id } });
+            if (!m) {
+                res.status(404).json({ message: 'Mutuelle introuvable' });
+                return;
             }
 
-            // Créer la mutuelle
-            const mutuelle = AppDataSource.getRepository(Mutuelle).create({
-                nom,
-                email,
-                telephone,
-                adresse,
-                ville,
-                codePostal,
-                pays,
-                siret,
-                motDePasse: await EncryptionService.hashPassword(motDePasse)
+            if (nom)  m.nom = nom;
+            if (email) m.email = email;
+            if (telephone) m.telephone = telephone;
+            if (adresse)   m.adresse   = adresse;
+            if (ville)     m.ville     = ville;
+            if (codePostal) m.codePostal = codePostal;
+            if (pays)      m.pays      = pays;
+            if (siret)     m.siret     = siret;
+
+            if (motDePasse) {
+                const salt = await bcrypt.genSalt(10);
+                m.motDePasse = await bcrypt.hash(motDePasse, salt);
+            }
+
+            const updated = await repo.save(m);
+            res.json({
+                id:    updated.id,
+                nom:   updated.nom,
+                email: updated.email,
+                telephone: updated.telephone,
+                adresse:   updated.adresse,
+                ville:     updated.ville,
+                codePostal:updated.codePostal,
+                pays:      updated.pays,
+                siret:     updated.siret
             });
-
-            const savedMutuelle = await AppDataSource.getRepository(Mutuelle).save(mutuelle);
-
-            // Créer le schéma pour la mutuelle
-            const schemaName = `mutuelle_${savedMutuelle.id.replace(/-/g, '_')}`;
-            await AppDataSource.query(`CREATE SCHEMA IF NOT EXISTS "${schemaName}"`);
-
-            // Créer les tables dans le schéma
-            await AppDataSource.query(`
-                CREATE TABLE IF NOT EXISTS "${schemaName}"."assures" (
-                    "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-                    "nom" character varying NOT NULL,
-                    "prenom" character varying NOT NULL,
-                    "email" character varying NOT NULL,
-                    "telephone" character varying NOT NULL,
-                    "dateNaissance" TIMESTAMP NOT NULL,
-                    "numeroSecuriteSociale" character varying NOT NULL,
-                    "numeroSecuriteSocialeHash" character varying NOT NULL,
-                    "iban" character varying NOT NULL,
-                    "ibanHash" character varying NOT NULL,
-                    "historiqueMedical" text NOT NULL,
-                    "historiqueMedicalHash" character varying NOT NULL,
-                    "dateCreation" TIMESTAMP NOT NULL DEFAULT now(),
-                    "dateMiseAJour" TIMESTAMP NOT NULL DEFAULT now(),
-                    "mutuelleId" uuid NOT NULL,
-                    CONSTRAINT "PK_assures" PRIMARY KEY ("id")
-                );
-
-                CREATE TABLE IF NOT EXISTS "${schemaName}"."dossiers" (
-                    "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-                    "numeroDossier" character varying NOT NULL,
-                    "description" text NOT NULL,
-                    "montantTotal" decimal(10,2) NOT NULL,
-                    "montantRembourse" decimal(10,2) NOT NULL,
-                    "statut" character varying NOT NULL,
-                    "typeSoin" character varying NOT NULL,
-                    "dateCreation" TIMESTAMP NOT NULL DEFAULT now(),
-                    "dateMiseAJour" TIMESTAMP NOT NULL DEFAULT now(),
-                    "mutuelleId" uuid NOT NULL,
-                    "assureId" uuid NOT NULL,
-                    CONSTRAINT "PK_dossiers" PRIMARY KEY ("id")
-                );
-
-                CREATE TABLE IF NOT EXISTS "${schemaName}"."justificatifs" (
-                    "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-                    "nomFichier" character varying NOT NULL,
-                    "cheminFichier" character varying NOT NULL,
-                    "typeFichier" character varying NOT NULL,
-                    "tailleFichier" integer NOT NULL,
-                    "dateCreation" TIMESTAMP NOT NULL DEFAULT now(),
-                    "dateMiseAJour" TIMESTAMP NOT NULL DEFAULT now(),
-                    "dossierId" uuid NOT NULL,
-                    CONSTRAINT "PK_justificatifs" PRIMARY KEY ("id")
-                );
-
-                CREATE TABLE IF NOT EXISTS "${schemaName}"."messages" (
-                    "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-                    "contenu" text NOT NULL,
-                    "dateCreation" TIMESTAMP NOT NULL DEFAULT now(),
-                    "dateMiseAJour" TIMESTAMP NOT NULL DEFAULT now(),
-                    "mutuelleId" uuid NOT NULL,
-                    "assureId" uuid NOT NULL,
-                    "dossierId" uuid NOT NULL,
-                    CONSTRAINT "PK_messages" PRIMARY KEY ("id")
-                );
-
-                CREATE TABLE IF NOT EXISTS "${schemaName}"."offres" (
-                    "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
-                    "nom" character varying NOT NULL,
-                    "description" text NOT NULL,
-                    "prix" decimal(10,2) NOT NULL,
-                    "dateCreation" TIMESTAMP NOT NULL DEFAULT now(),
-                    "dateMiseAJour" TIMESTAMP NOT NULL DEFAULT now(),
-                    "mutuelleId" uuid NOT NULL,
-                    CONSTRAINT "PK_offres" PRIMARY KEY ("id")
-                );
-
-                -- Ajouter les contraintes de clés étrangères
-                ALTER TABLE "${schemaName}"."assures" 
-                    ADD CONSTRAINT "FK_assures_mutuelle" 
-                    FOREIGN KEY ("mutuelleId") 
-                    REFERENCES "mutuelles"("id");
-
-                ALTER TABLE "${schemaName}"."dossiers" 
-                    ADD CONSTRAINT "FK_dossiers_mutuelle" 
-                    FOREIGN KEY ("mutuelleId") 
-                    REFERENCES "mutuelles"("id");
-
-                ALTER TABLE "${schemaName}"."dossiers" 
-                    ADD CONSTRAINT "FK_dossiers_assure" 
-                    FOREIGN KEY ("assureId") 
-                    REFERENCES "${schemaName}"."assures"("id");
-
-                ALTER TABLE "${schemaName}"."justificatifs" 
-                    ADD CONSTRAINT "FK_justificatifs_dossier" 
-                    FOREIGN KEY ("dossierId") 
-                    REFERENCES "${schemaName}"."dossiers"("id");
-
-                ALTER TABLE "${schemaName}"."messages" 
-                    ADD CONSTRAINT "FK_messages_mutuelle" 
-                    FOREIGN KEY ("mutuelleId") 
-                    REFERENCES "mutuelles"("id");
-
-                ALTER TABLE "${schemaName}"."messages" 
-                    ADD CONSTRAINT "FK_messages_assure" 
-                    FOREIGN KEY ("assureId") 
-                    REFERENCES "${schemaName}"."assures"("id");
-
-                ALTER TABLE "${schemaName}"."messages" 
-                    ADD CONSTRAINT "FK_messages_dossier" 
-                    FOREIGN KEY ("dossierId") 
-                    REFERENCES "${schemaName}"."dossiers"("id");
-
-                ALTER TABLE "${schemaName}"."offres" 
-                    ADD CONSTRAINT "FK_offres_mutuelle" 
-                    FOREIGN KEY ("mutuelleId") 
-                    REFERENCES "mutuelles"("id");
-            `);
-
-            return res.status(201).json(savedMutuelle);
-        } catch (error) {
-            console.error("Erreur lors de la création de la mutuelle:", error);
-            return res.status(500).json({ message: "Erreur lors de la création de la mutuelle" });
+            return;
+        } catch (err) {
+            console.error('Erreur updateProfile :', err);
+            res.status(500).json({ message: 'Erreur serveur' });
+            return;
         }
-    }
+    };
 }
 
-// Initialisation des routes
-MutuelleController.initializeRoutes(); 
+MutuelleController.initializeRoutes();

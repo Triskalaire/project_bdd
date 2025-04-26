@@ -1,142 +1,110 @@
-import { Request, Response, Router } from "express";
-import { getRepository } from "typeorm";
-import { Justificatif } from "../entities/Justificatif";
-import { Dossier } from "../entities/Dossier";
-import { authMiddleware } from "../middleware/auth";
-import multer from "multer";
-import path from "path";
-import fs from "fs";
-
-// Déclaration de l'interface pour étendre Request
-declare global {
-  namespace Express {
-    interface Request {
-      user: {
-        id: string;
-      };
-    }
-  }
-}
+// src/controllers/JustificatifController.ts
+import { Request, Response, Router, RequestHandler } from 'express';
+import { Justificatif } from '../entities/Justificatif';
+import { Dossier }      from '../entities/Dossier';
+import { getTenantDataSource } from '../services/TenantDataSource';
+import { authMiddleware }     from '../middleware/auth';
+import multer from 'multer';
+import fs     from 'fs';
 
 export class JustificatifController {
   public static router = Router();
-  private static upload = multer({ dest: "uploads/" });
+  private static upload = multer({ dest: 'uploads/' });
 
-  static getRouter() {
-    return this.router;
+  static initializeRoutes() {
+    this.router.post(
+        '/dossiers/:dossierId/justificatifs',
+        authMiddleware,
+        this.upload.single('file'),
+        this.uploadJustificatif
+    );
+    this.router.get(
+        '/justificatifs/:id',
+        authMiddleware,
+        this.getJustificatif
+    );
+    this.router.delete(
+        '/justificatifs/:id',
+        authMiddleware,
+        this.deleteJustificatif
+    );
   }
 
-  static async uploadJustificatif(req: Request, res: Response) {
+  static uploadJustificatif: RequestHandler = async (req, res) => {
     try {
       const dossierId = req.params.dossierId;
-      const dossierRepository = getRepository(Dossier);
-      const dossier = await dossierRepository.findOne({
-        where: {
-          id: dossierId,
-          mutuelle: { id: req.user.id }
-        }
-      });
+      const ds = await getTenantDataSource(req.mutuelle.id);
+      const dossierRepo = ds.getRepository(Dossier);
 
+      const dossier = await dossierRepo.findOne({
+        where: { id: dossierId, mutuelle: { id: req.mutuelle.id } }
+      });
       if (!dossier) {
-        return res.status(404).json({ message: "Dossier non trouvé" });
+        res.status(404).json({ message: 'Dossier non trouvé' });
+        return;
       }
 
-      if (!req.file) {
-        return res.status(400).json({ message: "Aucun fichier n'a été téléchargé" });
-      }
+      const file = req.file!;
+      const buffer = fs.readFileSync(file.path);
 
-      const justificatifRepository = getRepository(Justificatif);
-      const justificatif = justificatifRepository.create({
-        nomFichier: req.file.originalname,
-        typeDocument: path.extname(req.file.originalname),
-        contenu: fs.readFileSync(req.file.path),
-        taille: req.file.size,
-        mimeType: req.file.mimetype,
-        dossier: dossier
+      const justifRepo = ds.getRepository(Justificatif);
+      const justif = justifRepo.create({
+        nomFichier: file.originalname,
+        typeDocument: file.mimetype,
+        contenu: buffer,
+        taille: file.size,
+        mimeType: file.mimetype,
+        dossier
       });
+      await justifRepo.save(justif);
 
-      // Supprimer le fichier temporaire
-      fs.unlinkSync(req.file.path);
-
-      await justificatifRepository.save(justificatif);
-      res.status(201).json(justificatif);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Erreur lors du téléchargement du justificatif" });
+      fs.unlinkSync(file.path);
+      res.status(201).json(justif);
+    } catch (err) {
+      console.error('Erreur uploadJustificatif :', err);
+      res.status(500).json({ message: 'Erreur serveur' });
     }
-  }
+  };
 
-  static async getJustificatif(req: Request, res: Response) {
+  static getJustificatif: RequestHandler = async (req, res) => {
     try {
-      const id = req.params.id;
-      const justificatifRepository = getRepository(Justificatif);
-      const justificatif = await justificatifRepository.findOne({
-        where: {
-          id: id,
-          dossier: {
-            mutuelle: { id: req.user.id }
-          }
-        }
+      const { id } = req.params;
+      const ds = await getTenantDataSource(req.mutuelle.id);
+      const justifRepo = ds.getRepository(Justificatif);
+
+      const j = await justifRepo.findOne({
+        where: { id, dossier: { mutuelle: { id: req.mutuelle.id } } }
       });
-
-      if (!justificatif) {
-        return res.status(404).json({ message: "Justificatif non trouvé" });
+      if (!j) {
+        res.status(404).json({ message: 'Justificatif non trouvé' });
+        return;
       }
-
-      res.setHeader("Content-Type", justificatif.mimeType);
-      res.setHeader("Content-Disposition", `attachment; filename="${justificatif.nomFichier}"`);
-      res.send(justificatif.contenu);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Erreur lors de la récupération du justificatif" });
+      res.setHeader('Content-Disposition', `attachment; filename="${j.nomFichier}"`);
+      res.send(j.contenu);
+    } catch (err) {
+      console.error('Erreur getJustificatif :', err);
+      res.status(500).json({ message: 'Erreur serveur' });
     }
-  }
+  };
 
-  static async deleteJustificatif(req: Request, res: Response) {
+  static deleteJustificatif: RequestHandler = async (req, res) => {
     try {
-      const id = req.params.id;
-      const justificatifRepository = getRepository(Justificatif);
-      const justificatif = await justificatifRepository.findOne({
-        where: {
-          id: id,
-          dossier: {
-            mutuelle: { id: req.user.id }
-          }
-        }
+      const { id } = req.params;
+      const ds = await getTenantDataSource(req.mutuelle.id);
+      const result = await ds.getRepository(Justificatif).delete({
+        id,
+        dossier: { mutuelle: { id: req.mutuelle.id } } as any
       });
-
-      if (!justificatif) {
-        return res.status(404).json({ message: "Justificatif non trouvé" });
+      if (result.affected === 0) {
+        res.status(404).json({ message: 'Justificatif non trouvé' });
+        return;
       }
-
-      await justificatifRepository.remove(justificatif);
       res.status(204).send();
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: "Erreur lors de la suppression du justificatif" });
+    } catch (err) {
+      console.error('Erreur deleteJustificatif :', err);
+      res.status(500).json({ message: 'Erreur serveur' });
     }
-  }
-
-  // Routes
-  static initializeRoutes() {
-    JustificatifController.router.post(
-      "/dossiers/:dossierId/justificatifs",
-      authMiddleware,
-      JustificatifController.upload.single("file"),
-      JustificatifController.uploadJustificatif
-    );
-    JustificatifController.router.get(
-      "/justificatifs/:id",
-      authMiddleware,
-      JustificatifController.getJustificatif
-    );
-    JustificatifController.router.delete(
-      "/justificatifs/:id",
-      authMiddleware,
-      JustificatifController.deleteJustificatif
-    );
-  }
+  };
 }
 
-// Initialiser les routes
-JustificatifController.initializeRoutes(); 
+JustificatifController.initializeRoutes();
