@@ -1,10 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany } from "typeorm";
-import { Mutuelle } from "./Mutuelle";
-import { Dossier } from "./Dossier";
+// src/entities/Assure.ts
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    OneToMany,
+    CreateDateColumn,
+    UpdateDateColumn
+} from 'typeorm';
+import { Dossier } from './Dossier';
+import { Message } from './Message';
 
-@Entity("assures")
+@Entity('assures')
 export class Assure {
-    @PrimaryGeneratedColumn("uuid")
+    @PrimaryGeneratedColumn('uuid')
     id!: string;
 
     @Column()
@@ -13,42 +21,48 @@ export class Assure {
     @Column()
     prenom!: string;
 
-    @Column()
+    @Column({ unique: true })
     email!: string;
 
     @Column()
     telephone!: string;
 
-    @Column()
+    @Column({ type: 'date' })
     dateNaissance!: Date;
 
-    @Column({ select: false })
+    @Column()
     numeroSecuriteSociale!: string;
 
     @Column()
     numeroSecuriteSocialeHash!: string;
 
-    @Column({ select: false })
+    @Column()
     iban!: string;
 
     @Column()
     ibanHash!: string;
 
-    @Column({ type: "text", select: false })
+    @Column()
     historiqueMedical!: string;
 
-    @Column({ type: "text" })
+    @Column()
     historiqueMedicalHash!: string;
-
-    @ManyToOne(() => Mutuelle, mutuelle => mutuelle.assures)
-    mutuelle!: Mutuelle;
-
-    @OneToMany(() => Dossier, dossier => dossier.assure)
-    dossiers!: Dossier[];
 
     @CreateDateColumn()
     dateCreation!: Date;
 
     @UpdateDateColumn()
     dateMiseAJour!: Date;
-} 
+
+    @OneToMany(() => Dossier, dossier => dossier.assure, {
+        cascade: ['remove'],
+        onDelete: 'CASCADE'
+    })
+    dossiers!: Dossier[];
+
+    @OneToMany(() => Message, message => message.assure, {
+        cascade: ['remove'],
+        onDelete: 'CASCADE'
+    })
+    messages!: Message[];
+}

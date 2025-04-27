@@ -1,47 +1,54 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany } from "typeorm";
-import { Mutuelle } from "./Mutuelle";
-import { Assure } from "./Assure";
-import { Message } from "./Message";
-import { Justificatif } from "./Justificatif";
+// src/entities/Dossier.ts
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    ManyToOne,
+    OneToMany,
+    CreateDateColumn,
+    UpdateDateColumn,
+    JoinColumn
+} from 'typeorm';
+import { Assure }       from './Assure';
+import { Justificatif } from './Justificatif';
+import { Message }      from './Message';
 
-@Entity("dossiers")
+@Entity('dossiers')
 export class Dossier {
-    @PrimaryGeneratedColumn("uuid")
+    @PrimaryGeneratedColumn('uuid')
     id!: string;
 
-    @Column()
+    @Column({ unique: true })
     numeroDossier!: string;
 
-    @Column({ type: "text" })
+    @Column()
     description!: string;
 
-    @Column({ type: "decimal", precision: 10, scale: 2 })
+    @Column('decimal', { precision: 10, scale: 2 })
     montantTotal!: number;
 
-    @Column({ type: "decimal", precision: 10, scale: 2 })
+    @Column('decimal', { precision: 10, scale: 2, default: 0 })
     montantRembourse!: number;
 
-    @Column()
-    statut!: "EN_ATTENTE" | "EN_COURS" | "ACCEPTE" | "REFUSE";
+    @Column({ default: 'EN_ATTENTE' })
+    statut!: string;
 
     @Column()
-    typeSoin!: "OPTIQUE" | "DENTAIRE" | "HOSPITALISATION" | "AUTRE";
+    typeSoin!: string;
 
-    @ManyToOne(() => Mutuelle, mutuelle => mutuelle.dossiers)
-    mutuelle!: Mutuelle;
-
-    @ManyToOne(() => Assure, assure => assure.dossiers)
+    @ManyToOne(() => Assure, assure => assure.dossiers, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'assureId' })
     assure!: Assure;
 
-    @OneToMany(() => Message, message => message.dossier)
-    messages!: Message[];
-
-    @OneToMany(() => Justificatif, justificatif => justificatif.dossier)
+    @OneToMany(() => Justificatif, j => j.dossier, { cascade: ['remove'], onDelete: 'CASCADE' })
     justificatifs!: Justificatif[];
+
+    @OneToMany(() => Message, m => m.dossier, { cascade: ['remove'], onDelete: 'CASCADE' })
+    messages!: Message[];
 
     @CreateDateColumn()
     dateCreation!: Date;
 
     @UpdateDateColumn()
     dateMiseAJour!: Date;
-} 
+}

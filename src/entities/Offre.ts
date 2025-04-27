@@ -1,29 +1,41 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne } from "typeorm";
-import { Mutuelle } from "./Mutuelle";
+// src/entities/Offre.ts
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    ManyToOne,
+    CreateDateColumn,
+    UpdateDateColumn,
+    JoinColumn
+} from 'typeorm';
+import { Mutuelle } from './Mutuelle';
 
-@Entity("offres")
+@Entity('offres')
 export class Offre {
-    @PrimaryGeneratedColumn("uuid")
+    @PrimaryGeneratedColumn('uuid')
     id!: string;
 
     @Column()
     nom!: string;
 
-    @Column({ type: "text" })
+    @Column()
     description!: string;
 
-    @Column({ type: "decimal", precision: 10, scale: 2 })
+    @Column('decimal', { precision: 10, scale: 2 })
     montant!: number;
 
-    @Column({ type: "text" })
+    @Column()
     conditions!: string;
-
-    @ManyToOne(() => Mutuelle, mutuelle => mutuelle.offres)
-    mutuelle!: Mutuelle;
 
     @CreateDateColumn()
     dateCreation!: Date;
 
     @UpdateDateColumn()
     dateMiseAJour!: Date;
-} 
+
+    @ManyToOne(() => Mutuelle, mutuelle => mutuelle.offres, {
+        onDelete: 'CASCADE'
+    })
+    @JoinColumn({ name: 'mutuelleId' })
+    mutuelle!: Mutuelle;
+}

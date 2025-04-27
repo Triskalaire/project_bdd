@@ -1,18 +1,28 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from "typeorm";
-import { Assure } from "./Assure";
-import { Offre } from "./Offre";
-import { Dossier } from "./Dossier";
-import { Message } from "./Message";
+// src/entities/Mutuelle.ts
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    CreateDateColumn,
+    UpdateDateColumn,
+    OneToMany
+} from 'typeorm';
+import { Offre } from './Offre';
 
-@Entity("mutuelles")
+/**
+ * Cette entité vit en schema public (authentification).
+ * Pas de OneToMany ici : la relation tenant ↔ données
+ * se fait uniquement via l'isolation par schema.
+ */
+@Entity('mutuelles')
 export class Mutuelle {
-    @PrimaryGeneratedColumn("uuid")
+    @PrimaryGeneratedColumn('uuid')
     id!: string;
 
     @Column()
     nom!: string;
 
-    @Column()
+    @Column({ unique: true })
     email!: string;
 
     @Column()
@@ -33,27 +43,22 @@ export class Mutuelle {
     @Column()
     siret!: string;
 
-    @Column({ select: false })
+    @Column()
     motDePasse!: string;
 
     @Column({ default: true })
     estActif!: boolean;
-
-    @OneToMany(() => Assure, assure => assure.mutuelle)
-    assures!: Assure[];
-
-    @OneToMany(() => Offre, offre => offre.mutuelle)
-    offres!: Offre[];
-
-    @OneToMany(() => Dossier, dossier => dossier.mutuelle)
-    dossiers!: Dossier[];
-
-    @OneToMany(() => Message, message => message.mutuelle)
-    messages!: Message[];
 
     @CreateDateColumn()
     dateCreation!: Date;
 
     @UpdateDateColumn()
     dateMiseAJour!: Date;
-} 
+
+    @OneToMany(() => Offre, offre => offre.mutuelle, {
+        cascade: true,
+        onDelete: 'CASCADE'
+    })
+    offres!: Offre[];
+
+}

@@ -1,30 +1,39 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne } from "typeorm";
-import { Mutuelle } from "./Mutuelle";
-import { Dossier } from "./Dossier";
+// src/entities/Message.ts
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    ManyToOne,
+    CreateDateColumn,
+    UpdateDateColumn,
+    JoinColumn
+} from 'typeorm';
+import { Assure } from './Assure';
+import { Dossier } from './Dossier';
 
-@Entity("messages")
+@Entity('messages')
 export class Message {
-    @PrimaryGeneratedColumn("uuid")
+    @PrimaryGeneratedColumn('uuid')
     id!: string;
 
-    @Column({ type: "text" })
+    @Column()
     contenu!: string;
-
-    @Column()
-    estLu!: boolean;
-
-    @Column()
-    estEnvoyeParMutuelle!: boolean;
-
-    @ManyToOne(() => Mutuelle, mutuelle => mutuelle.messages)
-    mutuelle!: Mutuelle;
-
-    @ManyToOne(() => Dossier, dossier => dossier.messages)
-    dossier!: Dossier;
 
     @CreateDateColumn()
     dateCreation!: Date;
 
     @UpdateDateColumn()
     dateMiseAJour!: Date;
-} 
+
+    @ManyToOne(() => Assure, assure => assure.messages, {
+        onDelete: 'CASCADE'
+    })
+    @JoinColumn({ name: 'assureId' })
+    assure!: Assure;
+
+    @ManyToOne(() => Dossier, dossier => dossier.messages, {
+        onDelete: 'CASCADE'
+    })
+    @JoinColumn({ name: 'dossierId' })
+    dossier!: Dossier;
+}

@@ -1,9 +1,18 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne } from "typeorm";
-import { Dossier } from "./Dossier";
+// src/entities/Justificatif.ts
+import {
+    Entity,
+    PrimaryGeneratedColumn,
+    Column,
+    ManyToOne,
+    CreateDateColumn,
+    UpdateDateColumn,
+    JoinColumn
+} from 'typeorm';
+import { Dossier } from './Dossier';
 
-@Entity("justificatifs")
+@Entity('justificatifs')
 export class Justificatif {
-    @PrimaryGeneratedColumn("uuid")
+    @PrimaryGeneratedColumn('uuid')
     id!: string;
 
     @Column()
@@ -12,21 +21,24 @@ export class Justificatif {
     @Column()
     typeDocument!: string;
 
-    @Column({ type: "bytea" })
+    @Column('bytea')
     contenu!: Buffer;
 
-    @Column()
+    @Column('int')
     taille!: number;
 
     @Column()
     mimeType!: string;
-
-    @ManyToOne(() => Dossier, dossier => dossier.justificatifs)
-    dossier!: Dossier;
 
     @CreateDateColumn()
     dateCreation!: Date;
 
     @UpdateDateColumn()
     dateMiseAJour!: Date;
-} 
+
+    @ManyToOne(() => Dossier, dossier => dossier.justificatifs, {
+        onDelete: 'CASCADE'
+    })
+    @JoinColumn({ name: 'dossierId' })
+    dossier!: Dossier;
+}
