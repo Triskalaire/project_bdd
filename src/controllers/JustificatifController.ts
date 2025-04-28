@@ -13,17 +13,27 @@ export class JustificatifController {
   private static upload = multer({ storage: multer.memoryStorage() });
 
   static initializeRoutes() {
+    // 1) Créer un justificatif pour un dossier
     this.router.post(
         '/dossiers/:dossierId/justificatifs',
         authMiddleware,
         this.upload.single('file'),
         this.uploadJustificatif
     );
+
+    // 2) Télécharger un justificatif
     this.router.get(
         '/justificatifs/:id',
         authMiddleware,
         this.getJustificatif
     );
+    // 3) Lister tous les justificatifs d’un dossier
+    this.router.get(
+        '/dossiers/:dossierId/justificatifs',
+        authMiddleware,
+        this.getJustificatifsByDossier
+    );
+    // 4) Supprimer un justificatif
     this.router.delete(
         '/justificatifs/:id',
         authMiddleware,
@@ -94,6 +104,22 @@ export class JustificatifController {
       console.error('Erreur getJustificatif :', err);
       res.status(500).json({ message: 'Erreur serveur' });
       return;
+    }
+  };
+
+  /** GET /dossiers/:dossierId/justificatifs */
+  static getJustificatifsByDossier: RequestHandler = async (req, res): Promise<void> => {
+    try {
+      const { dossierId } = req.params;
+      const ds            = await getTenantDataSource(req.mutuelle.id);
+      const list          = await ds.getRepository(Justificatif).find({
+        where: { dossier: { id: dossierId } as any },
+        order: { dateCreation: 'ASC' }
+      });
+      res.json(list);
+    } catch (err) {
+      console.error('Erreur getJustificatifsByDossier :', err);
+      res.status(500).json({ message: 'Erreur serveur' });
     }
   };
 

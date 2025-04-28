@@ -34,100 +34,76 @@ export class MutuelleController {
         res.json({ exists });
     };
 
-    /** Inscription d’une mutuelle + création du schema tenant et seed */
-    static inscription: RequestHandler = async (req, res): Promise<void> => {
+    /** Inscription d'une nouvelle mutuelle */
+    static inscription: RequestHandler = async (req, res) => {
         try {
-            // 1) On extrait tous les champs requis
             const {
                 nom,
                 email,
-                motDePasse,
                 telephone,
                 adresse,
                 ville,
                 codePostal,
                 pays,
-                siret
+                siret,
+                motDePasse
             } = req.body;
 
-            // 2) Validation de base
+            // 1) Validation rapide
             if (
-                !nom ||
-                !email ||
-                !motDePasse ||
-                !telephone ||
-                !adresse ||
-                !ville ||
-                !codePostal ||
-                !pays ||
-                !siret
+                !nom || !email || !telephone ||
+                !adresse || !ville || !codePostal ||
+                !pays || !siret || !motDePasse
             ) {
                 res.status(400).json({ message: 'Tous les champs sont requis' });
                 return;
             }
 
-            // 3) Hash du mot de passe
-            const salt   = await bcrypt.genSalt(10);
-            const hashPw = await bcrypt.hash(motDePasse, salt);
+            const repo = AppDataSource.getRepository(Mutuelle);
 
-            // 4) Sauvegarde de la mutuelle dans le schema public
-            const publicRepo = AppDataSource.getRepository(Mutuelle);
-            const saved      = await publicRepo.save({
+            // 2) Empêcher doublon sur email OU SIRET
+            const existing = await repo.findOne({
+                where: [
+                    { email },
+                    { siret }
+                ]
+            });
+            if (existing) {
+                res.status(409).json({
+                    message: 'Une mutuelle existe déjà avec cet email ou ce SIRET'
+                });
+                return;
+            }
+
+            // 3) Hash du mot de passe
+            const hashPw = await bcrypt.hash(motDePasse, 10);
+
+            // 4) Création et enregistrement en schema public
+            const newMut = repo.create({
                 nom,
                 email,
-                motDePasse: hashPw,
                 telephone,
                 adresse,
                 ville,
                 codePostal,
                 pays,
-                siret
+                siret,
+                motDePasse: hashPw
             });
+            const saved = await repo.save(newMut);
 
-            // 5) Création du schema tenant + synchronisation des tables
-            const tenantDs = await getTenantDataSource(saved.id);
+            // 5) Création du schema tenant et seed de la mutuelle
+            await getTenantDataSource(saved.id);
 
-            // 6) Seed de la même mutuelle dans son schema tenant
-            //    pour respecter la FK dans assures, dossiers, etc.
-            await tenantDs.getRepository(Mutuelle).save({
-                id:            saved.id,
-                nom:           saved.nom,
-                email:         saved.email,
-                motDePasse:    saved.motDePasse,
-                telephone:     saved.telephone,
-                adresse:       saved.adresse,
-                ville:         saved.ville,
-                codePostal:    saved.codePostal,
-                pays:          saved.pays,
-                siret:         saved.siret,
-                estActif:      saved.estActif,
-                dateCreation:  saved.dateCreation,
-                dateMiseAJour: saved.dateMiseAJour
-            });
-
-            // 7) Génération du JWT
-            const token = jwt.sign(
-                { mutuelleId: saved.id },
-                process.env.JWT_SECRET || 'default-secret',
-                { expiresIn: '24h' }
-            );
-
-            // 8) Réponse
-            res.status(201).json({
-                token,
-                mutuelle: {
-                    id:    saved.id,
-                    nom:   saved.nom,
-                    email: saved.email
-                }
-            });
-            return;
+            // 6) Exclure le motDePasse du retour
+            const { motDePasse: _, ...publicInfo } = saved as any;
+            res.status(201).json(publicInfo);
         } catch (err) {
             console.error('Erreur inscription :', err);
             res.status(500).json({ message: 'Erreur serveur' });
-            return;
         }
     };
+
 
     /** Connexion : renvoie un JWT si ok */
     static connexion: RequestHandler = async (req, res): Promise<void> => {

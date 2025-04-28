@@ -1,4 +1,3 @@
-// src/entities/Mutuelle.ts
 import {
     Entity,
     PrimaryGeneratedColumn,
@@ -9,11 +8,6 @@ import {
 } from 'typeorm';
 import { Offre } from './Offre';
 
-/**
- * Cette entité vit en schema public (authentification).
- * Pas de OneToMany ici : la relation tenant ↔ données
- * se fait uniquement via l'isolation par schema.
- */
 @Entity('mutuelles')
 export class Mutuelle {
     @PrimaryGeneratedColumn('uuid')
@@ -40,7 +34,7 @@ export class Mutuelle {
     @Column()
     pays!: string;
 
-    @Column()
+    @Column({ unique: true })
     siret!: string;
 
     @Column()
@@ -60,5 +54,4 @@ export class Mutuelle {
         onDelete: 'CASCADE'
     })
     offres!: Offre[];
-
 }
